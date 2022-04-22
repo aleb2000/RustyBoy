@@ -1,4 +1,4 @@
-trait OpcodeTrait {
+trait TOpcode {
     fn name(&self) -> &str;
     fn size(&self) -> usize;
 }
@@ -678,7 +678,7 @@ const OPCODE_SIZES: [usize; 512] = [
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
 ];
 
-impl OpcodeTrait for Opcode {
+impl TOpcode for Opcode {
     fn name(&self) -> &str {
         let idx = *self as usize;
         OPCODE_NAMES[idx]
@@ -690,7 +690,7 @@ impl OpcodeTrait for Opcode {
     }
 }
 
-impl OpcodeTrait for OpcodeExt {
+impl TOpcode for OpcodeExt {
     fn name(&self) -> &str {
         let idx = *self as usize;
         OPCODE_NAMES[0xFF + 1 + idx]
