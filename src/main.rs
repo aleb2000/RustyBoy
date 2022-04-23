@@ -2,6 +2,9 @@ mod opcode;
 mod cartridge;
 
 use clap::Parser;
+use cartridge::Cartridge;
+
+use crate::cartridge::{licensee_code_name, CartridgeType};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -10,7 +13,7 @@ struct Args {
 }
 
 fn main() {
-    let _args = Args::parse();
+    let args = Args::parse();
 
-    println!("This is not yet an emulator.");
+    println!("File read correctly!");
 }
