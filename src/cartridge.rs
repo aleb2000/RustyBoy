@@ -1,5 +1,5 @@
-use std::fs;
-
+use std::{fs, fmt::Display};
+use anyhow::Error;
 use num_enum::TryFromPrimitive;
 
 const NINTENDO_LOGO: [u8; 48] = [
@@ -63,13 +63,10 @@ impl Cartridge {
         }   
     }
 
-    pub fn from_file(path: &str) -> Option<Cartridge> {
-        let data = match fs::read(path) {
-            Ok(v) => v,
-            Err(_) => return None
-        };
+    pub fn from_file(path: &str) -> Result<Cartridge, Error> {
+        let data = fs::read(path)?;
         
-        Some(Cartridge::new(data))
+        Ok(Cartridge::new(data))
     }
 
     pub fn new_licensee_code_name(&self) -> &str {
@@ -86,14 +83,94 @@ impl Cartridge {
     pub fn licensee_code_name(&self) -> &str {
         LICENSEE_CODE_NAMES[self.licensee_code as usize]
     }
+
+    pub fn destination_name(&self) -> &str {
+        if self.dest_code == 0 {
+            "Japanese"
+        } else if self.dest_code == 1 {
+            "Non-Japanese"
+        } else {
+            "Unknown"
+        }
+    }
+
+    pub fn rom_size_bytes(&self) -> Option<usize> {
+        if self.rom_size <= 8 {
+            Some(((32 * bytesize::KIB) << self.rom_size) as usize)
+        } else {
+            match self.rom_size {
+                52 => Some((1.1 * (bytesize::MIB as f64)) as usize),
+                53 => Some((1.2 * (bytesize::MIB as f64)) as usize),
+                54 => Some((1.5 * (bytesize::MIB as f64)) as usize),
+                _  => None
+            }
+        }
+    }
+
+    pub fn ram_size_bytes(&self) -> Option<usize> {
+        match self.ram_size {
+            0 => Some(0),
+            1 => None,
+            2 => Some(8   * bytesize::KIB as usize),
+            3 => Some(32  * bytesize::KIB as usize),
+            4 => Some(128 * bytesize::KIB as usize),
+            5 => Some(64  * bytesize::KIB as usize),
+            _ => None
+        }
+    }
+}
+
+impl std::fmt::Display for Cartridge {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let new = self.licensee_code == LICENSEE_USE_NEW;
+        let (licensee_name, licensee_code) = if new {
+            (self.new_licensee_code_name(), String::from_utf8_lossy(&self.new_licensee_code).into_owned())
+        } else {
+            (self.licensee_code_name(), self.licensee_code.to_string())
+        };
+
+        write!(f,
+            "title: {}\n\
+             manufacturer: {}\n\
+             cgb_flag: {}\n\
+             sgb_flag: {}\n\
+             type: {}\n\
+             rom_size: {} ({})\n\
+             ram_size: {} ({})\n\
+             destination: {} ({})\n\
+             licensee ({}): {} ({})\n\
+             version: {}\n\
+            ",
+            String::from_utf8_lossy(&self.title),
+            self.manufacturer,
+            self.cgb_flag,
+            self.sgb_flag,
+            self.ty,
+            bytesize::to_string(self.rom_size_bytes().unwrap() as u64, true), self.rom_size,
+            bytesize::to_string(self.ram_size_bytes().unwrap() as u64, true), self.ram_size,
+            self.destination_name(), self.dest_code,
+            if new {"new"} else {"old"}, licensee_name, licensee_code,
+            self.version
+        )
+    }
 }
 
 #[derive(TryFromPrimitive)]
 #[repr(u8)]
 enum CGBMode {
     Disabled   = 0x00,
-    GBCSupport = 0x80,  // Works on GBC as well as original Game Boy
-    GBCOnly    = 0xC0   // Only works on GBC
+    CGBSupport = 0x80,  // Works on GBC as well as original Game Boy
+    CGBOnly    = 0xC0   // Only works on GBC
+}
+
+impl Display for CGBMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            CGBMode::Disabled   => write!(f, "Disabled"),
+            CGBMode::CGBSupport => write!(f, "Color Game Boy Support"),
+            CGBMode::CGBOnly    => write!(f, "Color Game Boy Only")
+        }
+    }
 }
 
 #[derive(TryFromPrimitive)]
@@ -101,6 +178,15 @@ enum CGBMode {
 enum SGBMode {
     Disabled = 0x00,
     Enabled  = 0x03
+}
+
+impl Display for SGBMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SGBMode::Disabled => write!(f, "Disabled"),
+            SGBMode::Enabled  => write!(f, "Enabled")
+        }
+    }
 }
 
 #[derive(TryFromPrimitive)]
@@ -134,6 +220,41 @@ pub enum CartridgeType {
     BandaiTama5 = 0xFD,
     HuC3 = 0xFE,
     HuC1RamBattery = 0xFF
+}
+
+impl Display for CartridgeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            CartridgeType::RomOnly                    => write!(f, "ROM ONLY"),
+            CartridgeType::MBC1                       => write!(f, "MBC1"),
+            CartridgeType::MBC1Ram                    => write!(f, "MBC1 + RAM"),
+            CartridgeType::MBC1RamBattery             => write!(f, "MBC1 + RAM + BATTERY"),
+            CartridgeType::MBC2                       => write!(f, "MBC2"),
+            CartridgeType::MBC2Battery                => write!(f, "MBC2 + BATTERY"),
+            CartridgeType::RomRam                     => write!(f, "ROM + RAM"),
+            CartridgeType::RomRamBattery              => write!(f, "ROM + RAM + BATTERY"),
+            CartridgeType::MMM01                      => write!(f, "MMM01"),
+            CartridgeType::MMM01Ram                   => write!(f, "MMM01 + RAM"),
+            CartridgeType::MMM01RamBattery            => write!(f, "MMM01 + RAM + BATTERY"),
+            CartridgeType::MBC3TimerBattery           => write!(f, "MBC3 + TIMER + BATTERY"),
+            CartridgeType::MBC3TimerRamBattery        => write!(f, "MBC3 + TIMER + RAM + BATTERY"),
+            CartridgeType::MBC3                       => write!(f, "MBC3"),
+            CartridgeType::MBC3Ram                    => write!(f, "MBC3 + RAM"),
+            CartridgeType::MBC3RamBattery             => write!(f, "MBC3 + RAM + BATTERY"),
+            CartridgeType::MBC5                       => write!(f, "MBC5"),
+            CartridgeType::MBC5Ram                    => write!(f, "MBC5 + RAM"),
+            CartridgeType::MBC5RamBattery             => write!(f, "MBC5 + RAM + BATTERY"),
+            CartridgeType::MBC5Rumble                 => write!(f, "MBC5 + RUMBLE"),
+            CartridgeType::MBC5RumbleRam              => write!(f, "MBC5 + RUMBLE + RAM"),
+            CartridgeType::MBC5RumbleRamBattery       => write!(f, "MBC5 + RUMBLE + RAM + BATTERY"),
+            CartridgeType::MBC6                       => write!(f, "MBC6"),
+            CartridgeType::MBC7SensorRumbleRamBattery => write!(f, "MBC7 + SENSOR + RUMBLE + RAM + BATTERY"),
+            CartridgeType::PocketCamera               => write!(f, "POCKET CAMERA"),
+            CartridgeType::BandaiTama5                => write!(f, "BANDAI TAMA5"),
+            CartridgeType::HuC3                       => write!(f, "HuC3"),
+            CartridgeType::HuC1RamBattery             => write!(f, "HuC1 + RAM + BATTERY")
+        }
+    }
 }
 
 /**
@@ -188,3 +309,5 @@ const LICENSEE_CODE_NAMES: &'static [&'static str] = &[
     "jaleco",               "towachiki",       "uutaka",       "varie",                 "Unknown",          "epoch",           "Unknown",          "athena",          "asmik",            "natsume",           "king records",          "atlus",                 "epic/sony records", "Unknown",        "igs",             "Unknown",
     "a wave",               "Unknown",         "Unknown",      "extreme entertainment", "Unknown",          "Unknown",         "Unknown",          "Unknown",         "Unknown",          "Unknown",           "Unknown",               "Unknown",               "Unknown",           "Unknown",        "Unknown",         "ljn"
 ];
+
+const LICENSEE_USE_NEW: u8 = 0x33;

@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 clap = { version = "3.1.12", features = ["derive"] }
 num_enum = "0.5.7"
+bytesize = {version = "1.1.0", features = ["serde"]}
+anyhow = "1.0"
